@@ -18,7 +18,6 @@ import random
 import numpy as np
 import matplotlib.pyplot as plt
 from astropy.io import fits
-from astropy.wcs import WCS
 from matplotlib.patches import Rectangle
 from pathlib import Path
 
@@ -54,16 +53,10 @@ print(f"Frame : {fpath.parent.name} / {fpath.name}")
 with fits.open(fpath) as h:
     data = h[0].data.astype(np.float32)
 
-# ── GX 339-4 pixel position from reference frame WCS ─────────────────────────
-# All frames are mapped onto the reference grid, so use the reference WCS.
-ref_path = sorted(
-    (config.ALIGNED_DIR / "GX339_Ks_Imaging_1").glob("HAWKI.*_cal_aligned.fits")
-)[0]
-with fits.open(ref_path) as h:
-    ref_wcs = WCS(h[0].header)
-
-px, py = ref_wcs.all_world2pix([[config.TARGET_RA, config.TARGET_DEC]], 0)[0]
-px, py = int(np.round(px)), int(np.round(py))
+# ── GX 339-4 pixel position ───────────────────────────────────────────────────
+# All frames share the same reference pixel grid after alignment.
+# Position confirmed by visual inspection — WCS is ~7 arcsec off in Y.
+px, py = 750, 1110
 print(f"GX 339-4 pixel : ({px}, {py})")
 
 # ── Stretch ───────────────────────────────────────────────────────────────────
