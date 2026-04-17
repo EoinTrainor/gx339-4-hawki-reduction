@@ -1,0 +1,23 @@
+# GX 339-4 HAWK-I Reduction Pipeline
+# Install with: pip install -r requirements.txt
+
+# ─── Core scientific stack ────────────────────────────────────────────────────
+numpy>=1.24
+scipy>=1.10
+matplotlib>=3.7
+
+# ─── Astronomy ───────────────────────────────────────────────────────────────
+astropy>=5.3
+photutils>=1.9       # Aperture + PSF photometry
+astroalign>=2.4      # Image alignment to common WCS
+sep>=1.2             # Fast C-based source extraction (SExtractor-like)
+
+# ─── Image processing ────────────────────────────────────────────────────────
+scikit-image>=0.21   # General image processing utilities
+
+# ─── Utilities ───────────────────────────────────────────────────────────────
+tqdm>=4.65           # Progress bars for long loops
+pandas>=2.0          # Lightcurve tabulation and I/O
+
+# ─── Notebooks (optional but recommended) ────────────────────────────────────
+jupyterlab>=4.0

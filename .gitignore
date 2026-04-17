@@ -1,0 +1,66 @@
+# ─── Data & Outputs (never commit raw or reduced data) ───────────────────────
+data/
+output/
+outputs/
+*.fits
+*.fit
+*.fts
+*.FITS
+
+# ─── Jupyter Notebooks (outputs only — track the notebooks themselves) ────────
+notebooks/.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ─── Python ──────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.whl
+MANIFEST
+
+# ─── Virtual environments ────────────────────────────────────────────────────
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# ─── IDEs & editors ──────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ─── Logs ────────────────────────────────────────────────────────────────────
+logs/
+*.log
+
+# ─── Plots & figures (optional — remove these lines if you want to track them)
+# *.png
+# *.pdf
+# *.svg
+
+# ─── Config with secrets (use config.py for paths, never commit credentials) ─
+secrets.py
+.env.local
