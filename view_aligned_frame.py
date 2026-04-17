@@ -27,7 +27,7 @@ import config
 # ── Settings ──────────────────────────────────────────────────────────────────
 OB    = "random"   # e.g. "GX339_Ks_Imaging_7"  or  "random"
 INDEX = 0          # frame index within OB (0 = first); ignored if OB = "random"
-ZOOM  = 150        # zoom half-width in pixels (~16 arcsec each side)
+ZOOM  = 37         # zoom half-width in pixels (75 px box each side)
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── Select frame ──────────────────────────────────────────────────────────────
@@ -56,7 +56,7 @@ with fits.open(fpath) as h:
 # ── GX 339-4 pixel position ───────────────────────────────────────────────────
 # All frames share the same reference pixel grid after alignment.
 # Position confirmed by visual inspection — WCS is ~7 arcsec off in Y.
-px, py = 750, 1110
+px, py = 750, 1012
 print(f"GX 339-4 pixel : ({px}, {py})")
 
 # ── Stretch ───────────────────────────────────────────────────────────────────
@@ -80,15 +80,12 @@ fig.patch.set_facecolor("black")
 ax = axes[0]
 ax.imshow(data, origin="lower", cmap="inferno",
           vmin=vmin, vmax=vmax, interpolation="nearest")
-ax.plot(px, py, "+", color="cyan", ms=14, mew=1.5, label="GX 339-4 (WCS)")
 ax.add_patch(Rectangle((x0, y0), x1-x0, y1-y0,
                         lw=1.2, edgecolor="cyan", facecolor="none"))
 ax.set_title(f"{fpath.parent.name}\n{fpath.name}", color="white", fontsize=7)
 ax.set_xlabel("X (px)", color="white")
 ax.set_ylabel("Y (px)", color="white")
 ax.tick_params(colors="white")
-ax.legend(fontsize=8, labelcolor="cyan", facecolor="black",
-          edgecolor="white", loc="upper right")
 for sp in ax.spines.values():
     sp.set_edgecolor("white")
 
@@ -97,14 +94,9 @@ ax2 = axes[1]
 ax2.imshow(cutout, origin="lower", cmap="inferno",
            vmin=vmin_z, vmax=vmax_z, interpolation="nearest",
            extent=[x0, x1, y0, y1])
-ax2.plot(px, py, "+", color="cyan", ms=20, mew=2.0)
-scale_px = 50
-ax2.plot([x0+8, x0+8+scale_px], [y0+10, y0+10], color="white", lw=2)
-ax2.text(x0+8+scale_px/2, y0+22, f"{scale_px*0.106:.1f}\"",
-         color="white", fontsize=9, ha="center")
 ax2.set_title(
-    f"GX 339-4  —  {2*ZOOM*0.106:.0f}\" × {2*ZOOM*0.106:.0f}\" region\n"
-    f"RA {config.TARGET_RA:.4f}   Dec {config.TARGET_DEC:.4f}   [cyan + = WCS]",
+    f"GX 339-4  —  {2*ZOOM*0.106:.1f}\" × {2*ZOOM*0.106:.1f}\" region\n"
+    f"RA {config.TARGET_RA:.4f}   Dec {config.TARGET_DEC:.4f}",
     color="white", fontsize=9)
 ax2.set_xlabel("X (px)", color="white")
 ax2.set_ylabel("Y (px)", color="white")
