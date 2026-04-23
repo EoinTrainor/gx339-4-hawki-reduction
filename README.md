@@ -61,10 +61,11 @@ These products are stored in `GX 339-4 Output/eso_adp_fits/` and are useful as a
 
 Of the 12 OBs, the final 2 were obtained during a GX 339-4 outburst and are **excluded from lightcurve modelling**. Outburst state classification was performed using **Swift/BAT** hard X-ray monitoring data, with OB epochs cross-matched against the long-term BAT light curve.
 
-| OBs | Status | Used in lightcurve modelling? |
-|-----|--------|-------------------------------|
-| 1 – 10 | Quiescent | ✅ Yes |
-| 11 – 12 | Outburst (Swift/BAT confirmed) | ❌ No — excluded per supervisor guidance |
+| OBs | Status | Used in lightcurve modelling? | Used as ZOGY reference? |
+|-----|--------|-------------------------------|-------------------------|
+| 1 – 9 | Quiescent | ✅ Yes | ✅ Yes |
+| 10 | Suspected non-quiescent | ✅ Yes (science frames) | ❌ No — excluded from reference coadd |
+| 11 – 12 | Outburst (Swift/BAT confirmed) | ❌ No — excluded per supervisor guidance | ❌ No |
 
 During outburst, accretion disc and jet emission contribute significantly to the NIR flux, diluting the donor star's ellipsoidal modulation signal and rendering the mass function derivation unreliable. The X-ray classification and OB epoch cross-match are documented in `06_xray_analysis/outburst/`.
 
@@ -102,6 +103,8 @@ During outburst, accretion disc and jet emission contribute significantly to the
 ├── 03_alignment/           # Astrometric alignment to common WCS
 │
 ├── 04_zogy_difference_imaging/  # ZOGY difference imaging (PSF modelling + subtraction)
+│   ├── 09_zogy.py                  # Build coadded reference, model PSFs, run ZOGY Eq. 13–17; outputs lightcurve_raw.csv
+│   └── 09b_visualise_zogy.py       # Report-quality figures: reference image, before/after, D histogram, quality timeline
 │
 ├── 05_photometry/          # Aperture/PSF flux extraction and lightcurve
 │   ├── aperture_v1/            # First-pass circular aperture photometry (batch, imaging)
@@ -134,8 +137,8 @@ During outburst, accretion disc and jet emission contribute significantly to the
 | 6 | `02_image_calibration/` | `07_calibration_summary.py` | ✅ Done | Global sky statistics and quality plots across all 12 OBs |
 | 7 | `02_image_calibration/` | `08_reduction_summary.py` | ✅ Done | Global reduction CSV — all 317 frames, raw→aligned provenance |
 | 8 | `03_alignment/` | `08_align.py` | ✅ Done | Align 314/317 frames to common reference (astroalign, star-triangle) |
-| 9 | `04_zogy_difference_imaging/` | `09_zogy.py` | 🔲 Pending | PSF modelling + ZOGY image subtraction |
-| 10 | `05_photometry/` | `10_lightcurve.py` | 🔲 Pending | Flux extraction and lightcurve construction |
+| 9 | `04_zogy_difference_imaging/` | `09_zogy.py` | ✅ Done | ZOGY proper image subtraction (Zackay+2016) Eq. 13–17; S statistic + 8 reference stars extracted per frame; 236 frames, D_std(3σ-clip)=0.73, 5σ depth Ks≈17.1 |
+| 10 | `04_zogy_difference_imaging/` | `10_lightcurve.py` | 🔲 In progress | Phase-fold S_target on orbital period (Heida+2017); trend removal; flux calibration; ellipsoidal lightcurve |
 | 11 | `06_xray_analysis/` | — | ✅ Done | Cross-match OB epochs with Swift/BAT; confirm outburst OBs |
 | 12 | `07_modelling/` | `11_icarus_model.py` | 🔲 Pending | Ellipsoidal lightcurve modelling with ICARUS |
 
@@ -166,6 +169,7 @@ See `requirements.txt` for the full list. Core dependencies:
 - `scipy` — interpolation and convolution
 - `astroalign` — image alignment
 - `sep` — fast source extraction
+- `astroquery` — 2MASS catalog queries for photometric calibration
 
 ---
 
@@ -183,7 +187,8 @@ python 02_image_calibration/06_calibrate.py
 python 02_image_calibration/07_calibration_summary.py
 python 02_image_calibration/08_reduction_summary.py
 python 03_alignment/08_align.py
-# ZOGY, photometry — in development
+python 04_zogy_difference_imaging/09_zogy.py
+# photometry — in development
 ```
 
 Each script saves outputs to the directories defined in `config.py` under `OUTPUT_ROOT`.
