@@ -69,6 +69,8 @@ Of the 12 OBs, the final 2 were obtained during a GX 339-4 outburst and are **ex
 
 During outburst, accretion disc and jet emission contribute significantly to the NIR flux, diluting the donor star's ellipsoidal modulation signal and rendering the mass function derivation unreliable. The X-ray classification and OB epoch cross-match are documented in `06_xray_analysis/outburst/`.
 
+> **Note on campaign state:** Phase-folded lightcurve analysis (Stage 10) reveals a monotonic brightening of GX 339-4 over the 66-day observing window (factor ~4 rise in ZOGY differential flux), indicating the system was rising toward the confirmed outburst in OBs 11–12. OB7 (2025-07-18) shows anomalously elevated flux and may represent early outburst activity. The ellipsoidal modulation signal (~5–15% amplitude) cannot be cleanly separated from this long-term trend with 9 orbital phase measurements. Future observations should target confirmed quiescent epochs over 3–5 consecutive nights to achieve full phase coverage before variability builds up.
+
 > **Note:** Raw data, calibration frames, and pipeline outputs are stored locally and are **not tracked by this repository**. See `config.py` for path configuration.
 
 ---
@@ -104,7 +106,8 @@ During outburst, accretion disc and jet emission contribute significantly to the
 │
 ├── 04_zogy_difference_imaging/  # ZOGY difference imaging (PSF modelling + subtraction)
 │   ├── 09_zogy.py                  # Build coadded reference, model PSFs, run ZOGY Eq. 13–17; outputs lightcurve_raw.csv
-│   └── 09b_visualise_zogy.py       # Report-quality figures: reference image, before/after, D histogram, quality timeline
+│   ├── 09b_visualise_zogy.py       # Report-quality figures: reference image, before/after, D histogram, quality timeline
+│   └── 10_lightcurve.py            # Phase-fold S_target on Heida+2017 ephemeris; per-OB detrending; lightcurve plots
 │
 ├── 05_photometry/          # Aperture/PSF flux extraction and lightcurve
 │   ├── aperture_v1/            # First-pass circular aperture photometry (batch, imaging)
@@ -138,7 +141,7 @@ During outburst, accretion disc and jet emission contribute significantly to the
 | 7 | `02_image_calibration/` | `08_reduction_summary.py` | ✅ Done | Global reduction CSV — all 317 frames, raw→aligned provenance |
 | 8 | `03_alignment/` | `08_align.py` | ✅ Done | Align 314/317 frames to common reference (astroalign, star-triangle) |
 | 9 | `04_zogy_difference_imaging/` | `09_zogy.py` | ✅ Done | ZOGY proper image subtraction (Zackay+2016) Eq. 13–17; S statistic + 8 reference stars extracted per frame; 236 frames, D_std(3σ-clip)=0.73, 5σ depth Ks≈17.1 |
-| 10 | `04_zogy_difference_imaging/` | `10_lightcurve.py` | 🔲 In progress | Phase-fold S_target on orbital period (Heida+2017); trend removal; flux calibration; ellipsoidal lightcurve |
+| 10 | `04_zogy_difference_imaging/` | `10_lightcurve.py` | ✅ Done | Phase-fold S_target on Heida+2017 ephemeris (P=1.7587 d); per-OB detrending; 9 phase points recovered. Long-term brightening trend over 66 days dominates ellipsoidal signal — GX 339-4 was entering an active state during the campaign. New observations in confirmed quiescence required. |
 | 11 | `06_xray_analysis/` | — | ✅ Done | Cross-match OB epochs with Swift/BAT; confirm outburst OBs |
 | 12 | `07_modelling/` | `11_icarus_model.py` | 🔲 Pending | Ellipsoidal lightcurve modelling with ICARUS |
 
