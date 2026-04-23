@@ -53,8 +53,12 @@ FILTER               = "Ks"       # Observing filter
 
 # ─── Target configuration ─────────────────────────────────────────────────────
 TARGET_NAME = "GX339-4"
-TARGET_RA   = 255.70591           # degrees (J2000) — update if needed
-TARGET_DEC  = -48.78972           # degrees (J2000) — update if needed
+TARGET_RA   = 255.705780          # degrees (J2000) — NASA/SIMBAD
+TARGET_DEC  = -48.789750          # degrees (J2000) — NASA/SIMBAD
+# Approximate pixel seed for centroid fitting in the aligned reference frame.
+# WCS carries ~31px residual in Y for this crowded field; this visual position
+# is used as the centroid starting point with a tight (8px) search radius.
+TARGET_PIX_SEED = (750, 1012)     # (x, y), 0-indexed — visually confirmed
 
 # ─── Calibration parameters ───────────────────────────────────────────────────
 DARK_SIGMA_CLIP      = 3.0        # Sigma threshold for hot pixel masking in dark

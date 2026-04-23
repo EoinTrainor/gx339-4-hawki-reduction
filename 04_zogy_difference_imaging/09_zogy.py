@@ -8,9 +8,12 @@ Phase 1  — Proper coaddition reference (Zackay & Ofek 2015b / ZOGY Eq. 22–24
            Gaussian fit to isolated stars, σ from sigma-clipped background RMS,
            F from 2MASS Ks catalogue matching.  Accumulate in Fourier space.
 
-Phase 2  — ZOGY per-frame subtraction (Zackay, Ofek & Gal-Yam 2016, Eq. 13–15)
+Phase 2  — ZOGY per-frame subtraction (Zackay, Ofek & Gal-Yam 2016, Eq. 13–17)
            Each quiescent frame is differenced against the proper-coaddition
-           reference.  Outputs: proper difference image D and its PSF P_D.
+           reference.  Outputs: D (Eq. 13), P_D (Eq. 14), F_D (Eq. 15),
+           and S (Eq. 17) — the matched-filter detection statistic.
+           S is evaluated at GX 339-4's pixel position each frame;
+           differential flux = S_target / F_D.
 
 Phase 3  — Reference image quality metrics
            FWHM distribution, flux zero-point timeline, reference PSF profile,
@@ -46,6 +49,7 @@ TEST_N_FRAMES  = 5
 
 import sys, csv, json, warnings, time
 from pathlib import Path
+from astropy.time import Time
 
 # Force UTF-8 output on Windows (avoids cp1252 errors with Greek/box chars)
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -404,7 +408,64 @@ def estimate_sigma(data):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 7. PER-FRAME CHARACTERISATION
+# 7. SOURCE CENTROID REFINEMENT
+# ══════════════════════════════════════════════════════════════════════════════
+def find_source_centroid(image, cx_init, cy_init, search_radius=20):
+    """
+    Refine a source pixel position using SEP detection in a cutout of image.
+
+    Extracts a box around (cx_init, cy_init), runs SEP source detection, and
+    returns the centroid of the nearest detected source within search_radius px.
+    Falls back to a flux-weighted centroid if SEP finds nothing.
+
+    Returns (x, y) in full-frame 0-indexed pixel coordinates.
+    """
+    h, w   = image.shape
+    box    = search_radius + 10
+    y0 = max(0, int(cy_init) - box);  y1 = min(h, int(cy_init) + box + 1)
+    x0 = max(0, int(cx_init) - box);  x1 = min(w, int(cx_init) + box + 1)
+    cut = np.where(np.isfinite(image[y0:y1, x0:x1]),
+                   image[y0:y1, x0:x1], 0.0).astype(np.float64)
+
+    # Local background subtraction
+    try:
+        _bkg  = sep.Background(cut, bw=32, bh=32, fw=3, fh=3)
+        cut_s = cut - _bkg.back()
+        _rms  = _bkg.rms()
+    except Exception:
+        _, _med, _std = sigma_clipped_stats(cut[cut != 0], sigma=3.0)
+        cut_s = cut - _med
+        _rms  = np.full_like(cut, max(_std, 1.0))
+
+    # SEP detection: look for the nearest source within search_radius
+    try:
+        _objs, _ = sep.extract(cut_s, thresh=3.0, err=_rms, minarea=5,
+                               deblend_nthresh=32, deblend_cont=0.005)
+        if len(_objs) > 0:
+            _dist = np.hypot(_objs["x"] - (cx_init - x0),
+                             _objs["y"] - (cy_init - y0))
+            _near = np.argmin(_dist)
+            if _dist[_near] <= search_radius:
+                return (float(_objs["x"][_near] + x0),
+                        float(_objs["y"][_near] + y0))
+    except Exception:
+        pass
+
+    # Flux-weighted centroid fallback within inner half of search box
+    _inner = max(5, search_radius // 2)
+    _yy, _xx = np.mgrid[y0:y1, x0:x1]
+    _mask = ((_yy - cy_init)**2 + (_xx - cx_init)**2) <= _inner**2
+    _flux = np.clip(cut_s * _mask, 0, None)
+    _tot  = _flux.sum()
+    if _tot > 0:
+        return (float((_xx * _flux).sum() / _tot),
+                float((_yy * _flux).sum() / _tot))
+
+    return float(cx_init), float(cy_init)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 8. PER-FRAME CHARACTERISATION
 # ══════════════════════════════════════════════════════════════════════════════
 def characterise_frame(data, cat, ref_wcs):
     """
@@ -594,6 +655,56 @@ R_median  = float(np.nanmedian(R))
 R_clean   = np.where(np.isfinite(R), R, R_median)
 R_hat_ref = fft2(R_clean)
 
+# Compute GX 339-4 pixel position once from the reference WCS.
+# Seed position from config (visually confirmed; WCS carries ~31px residual in Y).
+# Tight search radius (8px < FWHM) prevents the centroid jumping to a neighbour.
+_seed_x, _seed_y = config.TARGET_PIX_SEED
+print(f"  GX 339-4 pixel (seed):          ({_seed_x}, {_seed_y})")
+_cx_refined, _cy_refined = find_source_centroid(R, _seed_x, _seed_y, search_radius=8)
+TARGET_PIX_X = int(round(_cx_refined))
+TARGET_PIX_Y = int(round(_cy_refined))
+print(f"  GX 339-4 pixel (centroid in R): ({TARGET_PIX_X}, {TARGET_PIX_Y})")
+
+# WCS still needed to project 2MASS catalogue positions onto the pixel grid.
+_ref_wcs_full = WCS(fits.getheader(REF_FITS))
+
+# ── Select photometric reference stars from 2MASS catalogue ───────────────────
+# Pick bright isolated stars to: (a) verify S≈0 for non-variable sources,
+# (b) provide calibration anchors for flux_diff → magnitude conversion.
+N_REF_STARS   = 8          # max reference stars to track
+MIN_SEP_TARGET = 80        # pixels — exclude stars too close to GX 339-4
+ref_stars = []
+if cat_2mass is not None:
+    _ks_arr  = np.array(cat_2mass["Kmag"],    dtype=float)
+    _ra_arr  = np.array(cat_2mass["RAJ2000"], dtype=float)
+    _dec_arr = np.array(cat_2mass["DEJ2000"], dtype=float)
+    # Convert all catalogue positions to pixel coords
+    _px_all, _py_all = _ref_wcs_full.all_world2pix(_ra_arr, _dec_arr, 0)
+    _on_chip = ((_px_all > 50) & (_px_all < shape[1] - 50) &
+                (_py_all > 50) & (_py_all < shape[0] - 50))
+    _sep_from_target = np.hypot(_px_all - TARGET_PIX_X, _py_all - TARGET_PIX_Y)
+    _usable = (_on_chip &
+               (_sep_from_target > MIN_SEP_TARGET) &
+               (_ks_arr >= TWOMASS_KS_MIN) &
+               (_ks_arr <= TWOMASS_KS_MAX))
+    # Sort by brightness (brightest first) and take up to N_REF_STARS
+    _idx_sorted = np.where(_usable)[0][np.argsort(_ks_arr[_usable])][:N_REF_STARS]
+    for _i, _idx in enumerate(_idx_sorted):
+        ref_stars.append({
+            "id":   f"ref_{_i+1:02d}",
+            "ra":   float(_ra_arr[_idx]),
+            "dec":  float(_dec_arr[_idx]),
+            "x":    float(_px_all[_idx]),
+            "y":    float(_py_all[_idx]),
+            "Kmag": float(_ks_arr[_idx]),
+        })
+    print(f"  Reference stars   : {len(ref_stars)} selected  "
+          f"(Ks = {ref_stars[0]['Kmag']:.1f}–{ref_stars[-1]['Kmag']:.1f} mag)")
+    # Save manifest so Stage 10 knows which stars were used
+    _rs_manifest = QUALITY_DIR / "reference_stars.json"
+    with open(_rs_manifest, "w") as _f:
+        json.dump(ref_stars, _f, indent=2)
+
 diff_frames = get_aligned_frames(REF_OBS, test_mode=TEST_MODE,
                                  test_n=TEST_N_FRAMES)
 print(f"  Science frames: {len(diff_frames)}")
@@ -652,6 +763,34 @@ for k, (ob_name, fpath) in enumerate(diff_frames):
     if abs(s) > EPSILON:
         P_D_stamp /= s
 
+    # ── ZOGY Eq. 17 — Optimal S statistic (matched-filter detection image) ──────
+    # S = IFFT(F_D · P̂_D* · D̂)
+    # For a point source with differential flux Δf at position x0:
+    #   E[S(x0)] = F_D · Δf  →  Δf = S(x0) / F_D
+    # S is the optimal linear statistic for detecting point-source variability.
+    S_hat    = F_D * np.conj(P_D_hat) * D_hat
+    S        = np.real(ifft2(S_hat))
+    S[~np.isfinite(N_data)] = np.nan
+
+    # Extract S and differential flux at GX 339-4's fixed pixel position
+    S_target  = float(S[TARGET_PIX_Y, TARGET_PIX_X])
+    flux_diff = S_target / F_D   # differential flux in reference-scale ADU
+
+    # Extract S at each reference star position (should be ≈ 0 for non-variables)
+    ref_S = {}
+    for rs in ref_stars:
+        rx, ry = int(round(rs["x"])), int(round(rs["y"]))
+        if 0 <= rx < shape[1] and 0 <= ry < shape[0] and np.isfinite(S[ry, rx]):
+            ref_S[rs["id"]] = float(S[ry, rx])
+        else:
+            ref_S[rs["id"]] = float("nan")
+
+    # Parse MJD from filename: HAWKI.2025-05-17T05_45_20.232_1_cal_aligned.fits
+    _fname_ts  = fpath.stem.replace("HAWKI.", "").split("_1_")[0]  # "2025-05-17T05_45_20.232"
+    _date, _t  = _fname_ts.split("T")
+    _ts_isot   = f"{_date}T{_t.replace('_', ':')}"                # "2025-05-17T05:45:20.232"
+    mjd        = float(Time(_ts_isot, format="isot", scale="utc").mjd)
+
     # ── Save D and P_D ────────────────────────────────────────────────────────
     out_ob  = DIFF_DIR / ob_name
     out_ob.mkdir(parents=True, exist_ok=True)
@@ -678,12 +817,16 @@ for k, (ob_name, fpath) in enumerate(diff_frames):
     D_fin = D[np.isfinite(D)]
     d_mean_clip, d_med_clip, d_std_clip = sigma_clipped_stats(D_fin, sigma=3.0, maxiters=5)
     d_std_raw  = float(np.nanstd(D))
-    diff_stats.append({
+    row = {
         "ob": ob_name, "file": fpath.name,
+        "mjd": mjd,
         "D_mean": float(d_mean_clip), "D_std": float(d_std_clip),
         "D_std_raw": d_std_raw,
-        "F_n": F_n, "sigma_n": sigma_n, "fwhm_n": fwhm_n,
-    })
+        "S_target": S_target, "flux_diff": flux_diff,
+        "F_n": F_n, "F_D": float(F_D), "sigma_n": sigma_n, "fwhm_n": fwhm_n,
+    }
+    row.update(ref_S)   # adds S_ref_01, S_ref_02, … columns
+    diff_stats.append(row)
 
     elapsed = time.time() - t0
     rate    = (k + 1) / elapsed if elapsed > 0 else 1
@@ -707,10 +850,27 @@ with open(stats_csv, "w", newline="") as f:
     w = csv.DictWriter(f, fieldnames=["ob","file","F_j","sigma_j","fwhm_px","n_stars"])
     w.writeheader(); w.writerows(frame_stats)
 
+_ref_ids = [rs["id"] for rs in ref_stars]
+
 diff_csv = QUALITY_DIR / "diff_stats.csv"
 with open(diff_csv, "w", newline="") as f:
-    w = csv.DictWriter(f, fieldnames=["ob","file","D_mean","D_std","D_std_raw","F_n","sigma_n","fwhm_n"])
+    w = csv.DictWriter(f, fieldnames=[
+        "ob","file","mjd",
+        "D_mean","D_std","D_std_raw",
+        "S_target","flux_diff","F_n","F_D","sigma_n","fwhm_n",
+    ] + _ref_ids)
     w.writeheader(); w.writerows(diff_stats)
+
+# ── Lightcurve CSV — one row per frame, ordered by MJD ───────────────────────
+lc_csv = DIFF_DIR / "lightcurve_raw.csv"
+lc_cols = ["mjd","ob","file","S_target","flux_diff","F_D","fwhm_n"] + _ref_ids
+lc_rows = sorted(diff_stats, key=lambda r: r["mjd"])
+with open(lc_csv, "w", newline="") as f:
+    w = csv.DictWriter(f, fieldnames=lc_cols)
+    w.writeheader()
+    for r in lc_rows:
+        w.writerow({k: r.get(k, float("nan")) for k in lc_cols})
+print(f"  Lightcurve CSV  : {lc_csv}")
 
 print(f"  Frame stats : {stats_csv.name}")
 print(f"  Diff stats  : {diff_csv.name}")
